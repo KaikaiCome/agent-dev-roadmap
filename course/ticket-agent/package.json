@@ -1,0 +1,23 @@
+{
+  "name": "ticket-agent",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "hello": "node --env-file-if-exists=.env examples/01-hello-model.ts",
+    "mini": "node --env-file-if-exists=.env examples/02-mini-agent.ts",
+    "bench": "node examples/03-retrieval-bench.ts",
+    "replay": "node --env-file-if-exists=.env examples/04-replay-run.ts",
+    "chat": "node --env-file-if-exists=.env src/cli.ts",
+    "server": "node --env-file-if-exists=.env src/main.ts",
+    "eval": "node --env-file-if-exists=.env src/eval/run.ts",
+    "test": "node --test \"test/*.test.ts\"",
+    "typecheck": "tsc -p ."
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}

@@ -151,14 +151,14 @@ export const snippets: Record<string, Snippet> = {
     id: 'agent-loop',
     title: '最小 coding agent（约 80 行）',
     language: 'typescript',
-    description: '包含工具定义、并行工具调用、错误回传、bash 审批、最大步数、取消，以及从 JSONL 事件日志推导历史。从这里开始扩展到 500–800 行。',
+    description: '仅用于理解循环的早期教学骨架，不是企业项目实现。未实现路径隔离、写入审批、幂等和可靠日志恢复；包含宿主机读写与命令执行，请勿用于真实数据或不可信输入。企业训练请按上方实验实现受限业务工具。',
     code: agentLoop,
   },
   'event-reducer': {
     id: 'event-reducer',
     title: '事件流 reducer 与断线重连',
     language: 'tsx',
-    description: '把后端事件 reduce 成可渲染节点（文本、工具卡片、审批）。用序号去重，断线后从 lastSeq 续传。',
+    description: '仅展示 reducer 思路的片段，不能直接当作完整组件使用。缺少网络事件校验、缺号补偿与重连定时器清理；请按上方实验补齐并测试后再使用。',
     code: eventReducer,
   },
 };

@@ -1,3 +1,6 @@
+import { training, type Training } from './training';
+import { tutorialTaskIds } from './tutorial';
+
 export interface Resource {
   title: string;
   url: string;
@@ -17,7 +20,7 @@ export interface TaskGroup {
 }
 
 export interface Stage {
-  id: string;
+  id: keyof typeof training;
   index: number;
   title: string;
   weeks: string;
@@ -25,6 +28,7 @@ export interface Stage {
   groups: TaskGroup[];
   deliverable: string;
   resources: Resource[];
+  training: Training;
   snippetId?: string;
 }
 
@@ -39,10 +43,11 @@ export const pillars = [
 export const stages: Stage[] = [
   {
     id: 'intuition',
+    training: training.intuition,
     index: 0,
     title: '建立直觉',
     weeks: '第 1–2 周',
-    goal: '先作为用户大量使用 Agent，再弄清 LLM API 的基本机制。',
+    goal: '从前端调用走到服务端模型 API，建立身份边界、流式协议与工具调用的基本能力。',
     groups: [
       {
         title: '作为用户观察',
@@ -67,7 +72,7 @@ export const stages: Stage[] = [
         ],
       },
     ],
-    deliverable: '一份笔记：记录 10 个你观察到的 Agent 失败案例及原因分析。',
+    deliverable: '一个可观察的问答 API、流式协议测试和 10 条失败观察记录。',
     resources: [
       { title: 'Building Effective Agents', url: 'https://www.anthropic.com/engineering/building-effective-agents' },
       { title: 'OpenAI Function calling', url: 'https://platform.openai.com/docs/guides/function-calling' },
@@ -76,10 +81,11 @@ export const stages: Stage[] = [
   },
   {
     id: 'from-scratch',
+    training: training['from-scratch'],
     index: 1,
     title: '从零手写一个 Agent',
     weeks: '第 3–5 周',
-    goal: '不用框架，用 TypeScript/Node 手写一个最小的 coding agent。这是整个规划中最关键的一步。',
+    goal: '不用 Agent 框架，手写检索 → 工单草稿 → 人工审批 → 幂等写入的可恢复循环。',
     groups: [
       {
         title: 'Agent 循环',
@@ -107,7 +113,7 @@ export const stages: Stage[] = [
         ],
       },
     ],
-    deliverable: '一个 500–800 行的 CLI agent，能完成“读代码 → 修改 → 跑测试”这类简单任务。',
+    deliverable: '一个受控工单 Agent，附状态机、数据库迁移、审批与崩溃恢复测试；不以代码行数验收。',
     resources: [
       { title: 'OpenAI Node SDK', url: 'https://github.com/openai/openai-node' },
       { title: 'MDN: AbortController', url: 'https://developer.mozilla.org/docs/Web/API/AbortController' },
@@ -116,10 +122,11 @@ export const stages: Stage[] = [
   },
   {
     id: 'agent-ui',
+    training: training['agent-ui'],
     index: 2,
     title: '发挥 React 优势，做 Agent 界面',
     weeks: '第 6–8 周',
-    goal: '给阶段 1 的 agent 加上 Web UI，掌握 Agent 前端的常见模式。',
+    goal: '为工单 Agent 构建 React 工作台，正确处理来源引用、审批、取消和事件恢复。',
     groups: [
       {
         title: '事件驱动的状态',
@@ -157,10 +164,11 @@ export const stages: Stage[] = [
   },
   {
     id: 'context-tools',
+    training: training['context-tools'],
     index: 3,
     title: '上下文工程与工具设计',
     weeks: '第 9–11 周',
-    goal: '决定模型每一轮看到什么，并设计模型能稳定调用的工具。',
+    goal: '实现租户隔离的企业知识检索、引用与拒答，并用上下文预算和工具评估保证稳定性。',
     groups: [
       {
         title: '上下文管理',
@@ -188,7 +196,7 @@ export const stages: Stage[] = [
         ],
       },
     ],
-    deliverable: '你的 agent 具备上下文压缩、MCP 和 Skill 加载能力。',
+    deliverable: '一个带 ACL、版本、撤权和引用的检索服务，附上下文压缩与 MCP 授权测试。',
     resources: [
       { title: 'Model Context Protocol', url: 'https://modelcontextprotocol.io/' },
       { title: 'Effective context engineering for AI agents', url: 'https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents' },
@@ -197,6 +205,7 @@ export const stages: Stage[] = [
   },
   {
     id: 'eval-observability',
+    training: training['eval-observability'],
     index: 4,
     title: '评估与可观测性',
     weeks: '第 12–14 周',
@@ -219,7 +228,7 @@ export const stages: Stage[] = [
         ],
       },
     ],
-    deliverable: '一条命令跑完 eval；每次改提示词或工具都能看到成功率变化。',
+    deliverable: '30 条可判分用例、离线回归命令、真实模型对照报告和可关联的脱敏 trace。',
     resources: [
       { title: 'Langfuse', url: 'https://langfuse.com/' },
       { title: 'OpenTelemetry JS', url: 'https://opentelemetry.io/docs/languages/js/' },
@@ -228,10 +237,11 @@ export const stages: Stage[] = [
   },
   {
     id: 'advanced',
+    training: training.advanced,
     index: 5,
     title: '进阶架构',
     weeks: '第 15–18 周',
-    goal: '掌握多 Agent、安全、长任务，并能评审工业级框架的取舍。',
+    goal: '解决长任务、重复投递、多租户配额与安全边界问题，再用评估决定是否需要多 Agent。',
     groups: [
       {
         title: '多 Agent',
@@ -259,7 +269,7 @@ export const stages: Stage[] = [
         ],
       },
     ],
-    deliverable: '一份框架对比报告，说明什么时候该用框架、什么时候该手写。',
+    deliverable: '可恢复的 worker、配额与权限策略，附故障注入报告和单/多 Agent 或框架取舍记录。',
     resources: [
       { title: 'LangGraph.js', url: 'https://langchain-ai.github.io/langgraphjs/' },
       { title: 'OpenAI Agents SDK (JS)', url: 'https://openai.github.io/openai-agents-js/' },
@@ -272,10 +282,11 @@ export const stages: Stage[] = [
   },
   {
     id: 'direction',
+    training: training.direction,
     index: 6,
-    title: '形成自己的方向',
+    title: '企业交付与毕业实战',
     weeks: '第 19 周起',
-    goal: '把前端能力与 Agent 能力结合，做出代表作品。',
+    goal: '在预生产环境交付企业知识库与工单 Agent，完成容量测量、回滚、备份恢复和故障答辩。',
     groups: [
       {
         title: '贡献与作品',
@@ -291,7 +302,7 @@ export const stages: Stage[] = [
         ],
       },
     ],
-    deliverable: '一个公开的 Agent 作品或被合并的开源贡献。',
+    deliverable: '一个他人可复现的完整项目，以及质量、权限、性能、费用、回滚与故障演练证据。',
     resources: [
       { title: 'Browser Use', url: 'https://github.com/browser-use/browser-use' },
       { title: 'Playwright MCP', url: 'https://github.com/microsoft/playwright-mcp' },
@@ -305,13 +316,20 @@ export const masteryCriteria: Task[] = [
   { id: 'm-tools', text: '能设计出模型可以稳定调用的工具，并说明设计理由' },
   { id: 'm-security', text: '能根据场景设计权限、沙箱和审批方案，并说明风险' },
   { id: 'm-review', text: '能评审一个工业级 Agent 框架的设计，指出它的取舍' },
+  { id: 'm-tenancy', text: '能用测试证明租户、文档权限、缓存与引用读取均正确隔离，撤权立即生效' },
+  { id: 'm-side-effects', text: '能演示审批绑定、幂等写入与结果未知时的对账，不通过盲目重试制造重复工单' },
+  { id: 'm-delivery', text: '能让他人复现项目，并提供容量/成本报告、回滚、备份恢复和故障演练证据' },
 ];
 
 export function stageTaskIds(stage: Stage): string[] {
-  return stage.groups.flatMap((g) => g.tasks.map((t) => t.id));
+  return [
+    ...stage.groups.flatMap((g) => g.tasks.map((t) => t.id)),
+    ...stage.training.acceptance.map((t) => t.id),
+  ];
 }
 
 export const allTaskIds: string[] = [
+  ...tutorialTaskIds,
   ...stages.flatMap(stageTaskIds),
   ...masteryCriteria.map((t) => t.id),
 ];

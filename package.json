@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run && npm run test:course && npm run test:mcp",
+    "test:course": "tsc -p course/ticket-agent && npm --prefix course/ticket-agent test",
+    "test:mcp": "tsc -p course/ticket-agent/mcp && npm --prefix course/ticket-agent/mcp test"
   },
   "dependencies": {
     "react": "^19.3.1",

@@ -91,6 +91,7 @@ button.danger { color: var(--danger); }
 }
 
 .hero { margin-bottom: 2rem; }
+.hero h1 { margin-top: 0.6rem; }
 .hero p, .goal { color: var(--muted); font-size: 1.05rem; }
 .muted { color: var(--muted); font-size: 0.9rem; }
 
@@ -170,6 +171,92 @@ textarea {
 
 .pager { display: flex; justify-content: space-between; gap: 1rem; margin-top: 2rem; }
 .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+.architecture, .worked-example {
+  padding: 0.85rem;
+  background: var(--accent-soft);
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+.learning-flow, .preparation { padding-left: 1.4rem; }
+.learning-flow li, .preparation li { margin-bottom: 0.6rem; }
+.start-link { font-weight: 600; }
+.training section[id] { scroll-margin-top: 1rem; }
+.lesson h3 { margin-top: 0.5rem; }
+.lesson p { overflow-wrap: anywhere; }
+summary { cursor: pointer; font-weight: 600; }
+summary:focus-visible, button:focus-visible, a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.self-check { border-top: 1px solid var(--border); padding-top: 0.75rem; }
+.self-check p { margin-top: 0.75rem; }
+.lab-steps { padding-left: 1.4rem; }
+.lab-steps li { padding-left: 0.3rem; margin-bottom: 1.25rem; }
+.expected { border-left: 3px solid var(--accent); padding-left: 0.75rem; }
+.incident { margin-bottom: 0.75rem; }
+.incident dt { font-weight: 600; margin-top: 0.75rem; }
+.incident dd { margin-left: 0; }
+.evidence-label { display: block; font-weight: 600; margin: 1rem 0 0.5rem; }
+.reference-code { margin-bottom: 1.5rem; }
+.reference-code > summary { margin-bottom: 0.75rem; }
+.delivery-list { list-style: none; padding: 0; }
+.delivery-list li { border-top: 1px solid var(--border); padding: 0.85rem 0; }
+.delivery-list span { display: block; color: var(--muted); font-size: 0.9rem; }
+.delivery-list p { margin: 0.35rem 0 0; }
+
+.nav-group { margin: 1.25rem 0 0; font-size: 0.78rem; font-weight: 600; color: var(--muted); letter-spacing: 0.04em; }
+.nav-group + ul { margin-top: 0.35rem; }
+.sr-label { display: block; font-weight: 600; margin: 1rem 0 0.5rem; }
+.error { color: var(--danger); }
+.concepts { margin: 0; display: grid; gap: 0.75rem; }
+.concepts dt { font-weight: 600; }
+.concepts dd { margin: 0.2rem 0 0; color: var(--muted); overflow-wrap: anywhere; }
+.tutorial-steps { list-style: none; padding: 0; margin: 0; }
+.tutorial-step { margin-bottom: 2rem; }
+.tutorial-step h3 { display: flex; align-items: center; gap: 0.6rem; }
+.tutorial-step p { overflow-wrap: anywhere; }
+.step-index {
+  flex-shrink: 0;
+  display: inline-grid;
+  place-items: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.85rem;
+}
+:not(pre) > code {
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  background: var(--accent-soft);
+  font: 0.88em ui-monospace, 'Cascadia Code', Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+.terminal, .source-file { margin: 0.75rem 0; }
+.code-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.source-file { border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem 0.8rem; background: var(--surface); }
+.source-file > summary { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem; }
+.source-file[open] > summary { margin-bottom: 0.6rem; }
+.file-path { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; overflow-wrap: anywhere; }
+.output-note { margin-top: 0.35rem; }
+.pitfalls { display: grid; gap: 0.75rem; }
+.pitfall { border-left: 3px solid var(--danger); padding-left: 0.75rem; }
+.interview { display: grid; gap: 0.5rem; }
+.interview details { border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem 0.8rem; background: var(--surface); }
+.interview summary { cursor: pointer; font-weight: 600; }
+.interview ul { margin: 0.5rem 0 0; }
+.pitfall p { margin: 0.2rem 0; overflow-wrap: anywhere; }
+.pager a { max-width: 48%; }
 
 @media (max-width: 760px) {
   .layout { flex-direction: column; }

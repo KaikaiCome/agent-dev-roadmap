@@ -1,9 +1,12 @@
 import { useRef } from 'react';
 import { allTaskIds, masteryCriteria, pillars, stages, stageTaskIds, type Stage } from '../data/roadmap';
 import { snippets } from '../data/snippets';
+import { capstone } from '../data/training';
+import { chapters, tutorialIntro } from '../data/tutorial';
 import { parseProgress, progress, ratio, useProgress } from '../progress';
 import { href } from '../router';
 import { CodeBlock, ProgressBar, TaskItem } from './ui';
+import { TrainingPanel } from './TrainingPanel';
 
 export function Home() {
   const { done } = useProgress();
@@ -11,13 +14,44 @@ export function Home() {
   return (
     <>
       <header className="hero">
-        <h1>React 高级开发者的 Agent 精通路线</h1>
-        <p>按每周 8–10 小时估算，约 5 个月。把 React 能力用在 Agent 界面上，同时补齐循环、上下文、工具、安全与评估能力。</p>
+        <span className="badge">面向前端开发者的企业级 Agent 实训</span>
+        <h1>从 React 开发到企业级 Agent 交付</h1>
+        <p>不止列学习清单：跟着 12 章基础篇实战教程，从一行模型调用写到带检索、审批、多租户、审计、评估和部署的企业级 Agent；再用 6 章高级篇深入 MCP、上下文工程、评审校准、性能可靠性、面试，以及生产难点的研究路径。每一步都有可运行的源码、命令和真实输出。</p>
         <div className="overall">
           <ProgressBar value={overall} label="总进度" />
           <span>总进度 {Math.round(overall * 100)}%</span>
         </div>
+        <a className="start-link" href={href({ page: 'learn', id: chapters[0].id })}>从第 0 章开始动手 →</a>
+        <p className="muted">总进度包含教程练习、专题任务与实训验收，是自评记录，不是能力认证。</p>
       </header>
+
+      <section className="card deliverable">
+        <h2>实战教程：从 0 搭建企业级 Agent</h2>
+        <p>{tutorialIntro.lead}</p>
+        <ol className="learning-flow">
+          {chapters.map((c) => (
+            <li key={c.id}><a href={href({ page: 'learn', id: c.id })}>{c.title}</a> — {c.summary}</li>
+          ))}
+        </ol>
+      </section>
+
+      <section className="card deliverable">
+        <h2>贯穿项目：{capstone.title}</h2>
+        <p>{capstone.brief}</p>
+        <p className="architecture">{capstone.architecture}</p>
+        <ol className="learning-flow">
+          {capstone.workflow.map((step) => <li key={step}>{step}</li>)}
+        </ol>
+        <a className="start-link" href={href({ page: 'stage', id: stages[0].id })}>深入专题：开始第一个实验 →</a>
+      </section>
+
+      <section className="card">
+        <h2>开始前的准备</h2>
+        <ul className="preparation">
+          {capstone.preparation.map((item) => <li key={item}>{item}</li>)}
+        </ul>
+        <p className="muted">{capstone.boundary}</p>
+      </section>
 
       <section>
         <h2>“精通”指什么</h2>
@@ -33,7 +67,7 @@ export function Home() {
       </section>
 
       <section>
-        <h2>学习阶段</h2>
+        <h2>深入专题（原理与企业场景）</h2>
         <ol className="stage-list">
           {stages.map((s) => {
             const r = ratio(done, stageTaskIds(s));
@@ -46,6 +80,7 @@ export function Home() {
                   </div>
                   <h3>{s.title}</h3>
                   <p>{s.goal}</p>
+                  <p className="muted">{s.training.lessons.length} 节站内课程 · {s.training.lab.steps.length} 步实验 · {s.training.incidents.length} 个故障案例</p>
                   <ProgressBar value={r} label={`${s.title} 进度`} />
                 </a>
               </li>
@@ -127,6 +162,12 @@ export function StageView({ stage }: { stage: Stage }) {
         </div>
       </header>
 
+      <TrainingPanel stage={stage} />
+
+      <section>
+        <h2>基础与拓展任务</h2>
+        <p className="muted">保留原路线的学习清单与已存进度。Coding Agent、开源贡献和框架对比可用于拓展，不替代上面的企业项目验收。</p>
+      </section>
       {stage.groups.map((g) => (
         <section className="card" key={g.title}>
           <h2>{g.title}</h2>
@@ -141,7 +182,12 @@ export function StageView({ stage }: { stage: Stage }) {
         <p>{stage.deliverable}</p>
       </section>
 
-      {snippet && <CodeBlock snippet={snippet} />}
+      {snippet && (
+        <details className="reference-code">
+          <summary>拓展代码骨架（非企业项目完整实现）</summary>
+          <CodeBlock snippet={snippet} />
+        </details>
+      )}
 
       <section className="card">
         <h2>参考资源</h2>
@@ -180,12 +226,28 @@ export function Mastery() {
     <article>
       <header className="stage-header">
         <h1>精通标准</h1>
-        <p className="goal">全部做到，就说明你已经能独立设计并评审生产级 Agent。</p>
+        <p className="goal">以可复现项目与测试证据检查能力，而不是以勾选代替交付。实际生产接入仍需业务、安全与运维审查。</p>
         <div className="overall">
           <ProgressBar value={r} label="精通标准进度" />
           <span>{Math.round(r * 100)}%</span>
         </div>
       </header>
+      <section className="card">
+        <h2>七阶段交付检查</h2>
+        <p className="muted">逐阶段核对验收项及实训证据；已有的基础任务完成记录不会自动视为实训通过。</p>
+        <ul className="delivery-list">
+          {stages.map((stage) => {
+            const gates = stage.training.acceptance;
+            return (
+              <li key={stage.id}>
+                <a href={href({ page: 'stage', id: stage.id })}>{stage.index}. {stage.title}</a>
+                <span>{gates.filter((gate) => done[gate.id]).length} / {gates.length} 项自评验收</span>
+                <p>{stage.training.outcome}</p>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
       <section className="card">
         <ul className="tasks">
           {masteryCriteria.map((t) => <TaskItem key={t.id} task={t} />)}

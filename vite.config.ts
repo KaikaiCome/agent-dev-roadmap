@@ -30,7 +30,7 @@ export default defineConfig({
     environment: 'jsdom',
     // Node 25+ ships a global localStorage that shadows jsdom's implementation.
     execArgv: ['--no-experimental-webstorage'],
-    // 参考项目后端和 MCP 服务的测试用 node:test 编写，由 npm run test:course / test:mcp 运行
-    exclude: [...configDefaults.exclude, 'course/ticket-agent/test/**', 'course/ticket-agent/mcp/test/**'],
+    // 参考项目后端、MCP 服务和框架对比子项目的测试用 node:test 编写，由 npm run test:course / test:mcp / test:frameworks 运行
+    exclude: [...configDefaults.exclude, 'course/ticket-agent/test/**', 'course/ticket-agent/mcp/test/**', 'course/ticket-agent/frameworks/test/**'],
   },
 })

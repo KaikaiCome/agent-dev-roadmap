@@ -1,6 +1,6 @@
 # Agent 精通路线
 
-这是一个帮助前端开发者学习企业级 AI Agent 工程的实训网站。从来没做过 Agent 开发的人，也能跟着 12 章基础篇实战教程，从零搭建一个企业知识库与工单 Agent。这个 Agent 包含权限检索、人工审批、多租户、审计、评测和部署。之后的 6 章高级篇面向资深 Agent 工程师，覆盖 MCP、上下文工程、LLM 评审校准、性能与可靠性、能力模型和面试，以及从原型走向大规模生产的难点研究路径。
+这是一个帮助前端开发者学习企业级 AI Agent 工程的实训网站。从来没做过 Agent 开发的人，也能跟着 12 章基础篇实战教程，从零搭建一个企业知识库与工单 Agent。这个 Agent 包含权限检索、人工审批、多租户、审计、评测和部署。之后的高级篇面向资深 Agent 工程师，覆盖 MCP、上下文工程、LLM 评审校准、性能与可靠性、能力模型和面试、从原型走向大规模生产的难点研究路径，以及把这些难点逐个落地的实现章节。
 
 ## 从这里开始：实战教程（`#/learn`）
 
@@ -26,6 +26,16 @@
   - 第 15 章：性能、成本与可靠性（提示词缓存、并发工具、降级熔断）
   - 第 16 章：能力模型、系统设计题、故障演练与面试题
   - 第 17 章：生产难点地图（规模化检索、分布式运行、企业权限、可观测性、真实模型漂移、多 Agent 与记忆、未知故障排查、安全合规），每个难点都给出入手实验、一手资料和衡量标准
+  - 第 18 章：混合检索（切块、BM25、向量、RRF 融合、重排序接口、入库注入筛查），用包含无答案用例的基准对比四种检索方式
+  - 第 19 章：子 Agent 与长期记忆（只读调研子 Agent 作为工具：权限不升级、独立预算、取消传递、调用树审计；按租户和员工隔离的记忆：写入策略、出处、删除、防投毒），用评测和多会话基准说明收益与代价
+  - 第 20 章：编码 Agent 与沙箱（列文件、按行读取、原文唯一匹配的搜索替换编辑、白名单命令；工作区路径与符号链接限制、进程树超时、输出截断、环境变量清洗、Node 权限模型与 Docker 方案、ask/auto 审批取舍；编码 Agent 与浏览器 Agent 的评测和风险），离线演示从红到绿
+  - 第 21 章：红队测试与护栏（按 OWASP LLM Top 10 2025 分类的对抗用例与照做注入的假模型；输入、工具调用、工具结果、输出四个检查点；最小权限、参数约束、意图只来自员工原话等结构性防御；外带链接、PII、金丝雀；如实展示正则被绕过；双 LLM 与 CaMeL；红队接进 CI 作为门禁）
+  - 第 22 章：可观测性（零依赖 OpenTelemetry 追踪：span 树、W3C traceparent 传播、OTLP/HTTP 导出不阻塞 Agent；按 GenAI 语义约定记录模型调用、工具调用、审批等待与子 Agent，默认不记录内容；用 Jaeger 查看、用 trace 排查未知故障；头部与尾部采样、基数、PII；从事件日志计算成功率、延迟分位数、每次 run 成本与错误预算燃烧率）
+  - 第 23 章：分布式运行（node:sqlite 上的持久化 run 队列，多个 worker 进程共享一个数据库；租约、心跳与过期接手，重试上限与死信；每次领取递增的栅栏令牌，用临时触发器拒绝僵尸 worker 的所有写入；事务性 outbox、至少一次投递与消费端去重；按租户的并发与排队上限；随机 kill -9 和冻结 worker 的混沌测试验证不丢不重；SQLite 的边界与迁移到 Postgres SKIP LOCKED、Redis Streams、Temporal/Restate/Inngest/DBOS）
+  - 第 24 章：真实模型下的可靠性（固定种子的随机扰动 mock 模拟真实模型的错误形态；每条用例跑 K 次，pass@k 与 τ-bench 的 pass^k、Wilson 置信区间，critical 用例要求 k 次全过；请求规范化 + 脱敏的录制回放，未命中时报出第一处不同；零依赖 JSON Schema 校验、工具参数与结构化输出的修复循环和修复率，OpenAI strict 结构化输出；固定快照与逐条漂移检测）
+  - 第 25 章：模型侧（从事件日志导出 OpenAI 格式的 SFT 数据：还原工具调用配对、脱敏、租户退出、注入与评测题过滤、去重、按员工划分训练/验证集与质量报告；从评分构造 DPO 偏好数据；mock 变体的前后对比评测、逐条退化检测与小样本显著性；何时微调、蒸馏、LoRA、多模态输入与数据治理）
+  - 第 26 章：框架对比（用 OpenAI Agents SDK 和 LangGraph.js 重写检索、审批建单与多轮对话，和手写实现逐字对比；对比控制力、持久化、审批、可观测、锁定与升级成本）
+  - 第 27 章：Python 版本（标准库移植模型适配、SSE、工具循环、权限检索、审批建单、SQLite 与评测门禁，并对照 pydantic、FastAPI、OpenAI Python SDK、Pydantic AI 与 LangGraph）；可选，`npm run test:python` 单独运行，不在 `npm test` 中
 
 ## 深入专题
 
@@ -59,9 +69,11 @@
 ```sh
 npm install
 npm run dev          # 开发服务器
-npm test             # 网站与工作台的 Vitest 测试 + 参考项目和 MCP 服务的类型检查与 node:test 测试
+npm test             # 网站与工作台的 Vitest 测试 + 参考项目、MCP 服务和框架对比子项目的类型检查与 node:test 测试
 npm run test:course  # 只运行参考项目的类型检查和测试
 npm run test:mcp     # 只运行 MCP 服务的类型检查和测试（先执行 npm ci --prefix course/ticket-agent/mcp）
+npm run test:frameworks  # 只运行框架对比子项目的类型检查和测试（先执行 npm ci --prefix course/ticket-agent/frameworks）
+npm run verify --prefix course/ticket-agent  # 学员本地验收：按章节运行测试与门禁脚本，任一不达标退出码为 1
 npm run build        # 类型检查并输出到 dist/
 npm run lint
 ```

@@ -25,6 +25,26 @@ export interface Draft {
   sourceIds: string[];
 }
 
+export interface RunLink {
+  parentRunId: string;
+  parentCallId: string;
+  /** 子 Agent 的名字，例如 research */
+  agent: string;
+}
+
+export interface MemoryRecord {
+  id: string;
+  tenantId: string;
+  userId: string;
+  /** 记的是哪一项，例如“电脑资产编号”。同一员工同一 key 只保留最新一条 */
+  key: string;
+  content: string;
+  /** 哪次 run 里经员工确认写入的，用于溯源 */
+  sourceRunId: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
 export interface Ticket {
   id: string;
   idempotencyKey: string;
@@ -73,6 +93,27 @@ CREATE TABLE IF NOT EXISTS tickets (
   title TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+-- 第 19 章：子 Agent 的 run 挂在父 run 的某次工具调用下面，审计时能还原整棵调用树。
+-- 同一次调用只能有一个子 run：崩溃恢复后重新执行这次调用，会接着跑原来的子 run
+CREATE TABLE IF NOT EXISTS run_links (
+  child_run_id TEXT PRIMARY KEY REFERENCES runs(id),
+  parent_run_id TEXT NOT NULL REFERENCES runs(id),
+  parent_call_id TEXT NOT NULL,
+  agent TEXT NOT NULL,
+  UNIQUE (parent_run_id, parent_call_id)
+);
+-- 第 19 章：长期记忆。按租户 + 员工隔离；key 相同的新记忆覆盖旧的；过期后不再注入
+CREATE TABLE IF NOT EXISTS memories (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  key TEXT NOT NULL,
+  content TEXT NOT NULL,
+  source_run_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS memories_owner ON memories (tenant_id, user_id);
 `;
 
 type Row = Record<string, unknown>;
@@ -84,13 +125,19 @@ export class Store {
 
   constructor(path = ':memory:') {
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
-    this.#db = new DatabaseSync(path);
+    // timeout = busy_timeout：多个进程共享同一个文件时（第 23 章），拿不到写锁先等待，而不是立刻报 SQLITE_BUSY
+    this.#db = new DatabaseSync(path, { timeout: 5000 });
     this.#db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
     this.#db.exec(SCHEMA);
   }
 
   close() {
     this.#db.close();
+  }
+
+  /** 第 23 章：队列和 outbox 需要在同一个连接、同一个事务里读写自己的表，并安装栅栏检查 */
+  get database(): DatabaseSync {
+    return this.#db;
   }
 
   /** 多条写入要么全部成功、要么全部回滚。事件在提交成功后才通知订阅者。嵌套调用并入外层事务 */
@@ -115,13 +162,17 @@ export class Store {
     return result;
   }
 
-  createRun(user: User, question: string): Run {
+  /** parent 不为空表示这是子 Agent 的 run（第 19 章），和父 run 的关联与 run 本身在同一个事务里写入 */
+  createRun(user: User, question: string, parent?: RunLink): Run {
     const id = randomUUID();
     const now = new Date().toISOString();
     this.transaction(() => {
       this.#db.prepare('INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?, ?)')
         .run(id, user.tenantId, user.id, question, 'running', now, now);
-      this.append(id, 'run_started', { question, userId: user.id });
+      if (parent) {
+        this.#db.prepare('INSERT INTO run_links VALUES (?, ?, ?, ?)').run(id, parent.parentRunId, parent.parentCallId, parent.agent);
+      }
+      this.append(id, 'run_started', { question, userId: user.id, ...parent });
     });
     return this.getRun(id)!;
   }
@@ -131,8 +182,21 @@ export class Store {
     return row ? toRun(row) : undefined;
   }
 
+  /** 只返回顶层 run。子 run 由父 run 重新执行那次工具调用时接着跑，不能被当成独立任务恢复（否则会拿到父 Agent 的全部工具） */
   runsWithStatus(status: RunStatus): Run[] {
-    return (this.#db.prepare('SELECT * FROM runs WHERE status = ? ORDER BY created_at').all(status) as Row[]).map(toRun);
+    return (this.#db.prepare('SELECT * FROM runs WHERE status = ? AND id NOT IN (SELECT child_run_id FROM run_links) ORDER BY created_at').all(status) as Row[]).map(toRun);
+  }
+
+  /** 父 run 的某次工具调用创建的子 run */
+  childRun(parentRunId: string, parentCallId: string): Run | undefined {
+    const row = this.#db.prepare('SELECT runs.* FROM runs JOIN run_links ON runs.id = run_links.child_run_id WHERE parent_run_id = ? AND parent_call_id = ?')
+      .get(parentRunId, parentCallId) as Row | undefined;
+    return row ? toRun(row) : undefined;
+  }
+
+  childRuns(parentRunId: string): Run[] {
+    return (this.#db.prepare('SELECT runs.* FROM runs JOIN run_links ON runs.id = run_links.child_run_id WHERE parent_run_id = ? ORDER BY runs.created_at')
+      .all(parentRunId) as Row[]).map(toRun);
   }
 
   setStatus(runId: string, status: RunStatus) {
@@ -208,6 +272,45 @@ export class Store {
     return (this.#db.prepare('SELECT * FROM tickets WHERE tenant_id = ? ORDER BY created_at').all(tenantId) as Row[]).map(toTicket);
   }
 
+  /**
+   * 写入一条记忆。内容完全相同 = 重复，只延长有效期；
+   * onConflict=replace 时同一 key 的旧记忆被删除（“我的资产编号换了”），append 时新旧并存。
+   */
+  saveMemory(input: Omit<MemoryRecord, 'id' | 'createdAt'>, onConflict: 'replace' | 'append' = 'replace'): { memory: MemoryRecord; status: 'created' | 'replaced' | 'duplicate' } {
+    return this.transaction(() => {
+      const owner = [input.tenantId, input.userId] as const;
+      const same = this.#db.prepare('SELECT * FROM memories WHERE tenant_id = ? AND user_id = ? AND content = ?')
+        .get(...owner, input.content) as Row | undefined;
+      if (same) {
+        this.#db.prepare('UPDATE memories SET expires_at = ? WHERE id = ?').run(input.expiresAt, String(same.id));
+        return { memory: { ...toMemory(same), expiresAt: input.expiresAt }, status: 'duplicate' as const };
+      }
+      const replaced = onConflict === 'replace'
+        ? Number(this.#db.prepare('DELETE FROM memories WHERE tenant_id = ? AND user_id = ? AND key = ?').run(...owner, input.key).changes)
+        : 0;
+      const memory: MemoryRecord = { ...input, id: `mem_${randomUUID().slice(0, 8)}`, createdAt: new Date().toISOString() };
+      this.#db.prepare('INSERT INTO memories VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(memory.id, memory.tenantId, memory.userId, memory.key, memory.content, memory.sourceRunId, memory.createdAt, memory.expiresAt);
+      return { memory, status: replaced > 0 ? 'replaced' as const : 'created' as const };
+    });
+  }
+
+  /** 某个员工未过期的记忆，最新的在前。租户和员工两个条件缺一不可 */
+  memories(tenantId: string, userId: string, now = new Date()): MemoryRecord[] {
+    return (this.#db.prepare('SELECT * FROM memories WHERE tenant_id = ? AND user_id = ? AND expires_at > ? ORDER BY created_at DESC, rowid DESC')
+      .all(tenantId, userId, now.toISOString()) as Row[]).map(toMemory);
+  }
+
+  /** 删除一条记忆；id 不属于这个员工时什么也不做 */
+  deleteMemory(tenantId: string, userId: string, id: string): boolean {
+    return Number(this.#db.prepare('DELETE FROM memories WHERE tenant_id = ? AND user_id = ? AND id = ?').run(tenantId, userId, id).changes) > 0;
+  }
+
+  /** 删除一个员工的全部记忆（被遗忘权），包括已过期的 */
+  deleteMemories(tenantId: string, userId: string): number {
+    return Number(this.#db.prepare('DELETE FROM memories WHERE tenant_id = ? AND user_id = ?').run(tenantId, userId).changes);
+  }
+
   #emit(event: AgentEvent) {
     for (const listener of this.#listeners) {
       // 一个订阅者（例如断开的 SSE 连接）出错，不影响其他订阅者，也不影响写入方
@@ -229,6 +332,19 @@ function toRun(row: Row): Run {
     status: row.status as RunStatus,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
+  };
+}
+
+function toMemory(row: Row): MemoryRecord {
+  return {
+    id: String(row.id),
+    tenantId: String(row.tenant_id),
+    userId: String(row.user_id),
+    key: String(row.key),
+    content: String(row.content),
+    sourceRunId: String(row.source_run_id),
+    createdAt: String(row.created_at),
+    expiresAt: String(row.expires_at),
   };
 }
 

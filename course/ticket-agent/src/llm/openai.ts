@@ -1,3 +1,4 @@
+import { traceHeaders } from '../telemetry/trace.ts';
 import { readSSE } from './sse.ts';
 import type { ChatModel, Message, ModelRequest, ModelResponse, ToolCall, Usage } from './types.ts';
 
@@ -39,6 +40,9 @@ async function complete(options: OpenAICompatibleOptions, request: ModelRequest)
       ? request.tools.map((tool) => ({ type: 'function', function: tool }))
       : undefined,
     max_tokens: request.maxOutputTokens,
+    response_format: request.responseFormat
+      ? { type: 'json_schema', json_schema: { name: request.responseFormat.name, schema: request.responseFormat.schema, strict: request.responseFormat.strict ?? true } }
+      : undefined,
     stream: true,
     stream_options: { include_usage: true },
   });
@@ -50,7 +54,7 @@ async function complete(options: OpenAICompatibleOptions, request: ModelRequest)
     try {
       response = await fetchImpl(`${options.baseURL}/chat/completions`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${options.apiKey}` },
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${options.apiKey}`, ...traceHeaders() },
         body,
         signal,
       });

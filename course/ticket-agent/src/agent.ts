@@ -2,10 +2,13 @@ import type { User } from './data/seed.ts';
 import { terminalStatuses, type AgentEvent, type RunStatus, type ToolFailure } from './events.ts';
 import { ModelError } from './llm/openai.ts';
 import { estimateTokens, fitContext } from './context.ts';
-import type { ChatModel, Message, ToolCall } from './llm/types.ts';
+import type { ChatModel, Message, ModelRequest, ToolCall } from './llm/types.ts';
 import { silentLogger, type Logger } from './logger.ts';
+import { BLOCKED_INPUT_REPLY, type Guardrails } from './guardrails/index.ts';
+import { formatMemories, type Memory } from './memory.ts';
 import { systemPrompt } from './prompt.ts';
 import type { Store } from './store.ts';
+import { activeTelemetry, type AgentTelemetry } from './telemetry/genai.ts';
 import { ToolError, type Tool } from './tools/types.ts';
 
 export interface AgentOptions {
@@ -26,6 +29,14 @@ export interface AgentOptions {
   approvalTtlMs?: number;
   onDelta?: (runId: string, text: string) => void;
   logger?: Logger;
+  /** 替换默认的系统提示词。子 Agent 用它换成自己的角色说明（第 19 章） */
+  systemPrompt?: (user: User) => string;
+  /** 长期记忆（第 19 章）。缺省不启用：不注入任何记忆，行为与前面章节完全一致 */
+  memory?: Pick<Memory, 'recall'>;
+  /** 第 22 章：OpenTelemetry 追踪。缺省时沿用当前上下文里的（子 Agent 靠它挂到父 run 的 trace 上），都没有就不追踪 */
+  telemetry?: AgentTelemetry;
+  /** 第 21 章：输入检查、工具调用策略、工具结果筛查、输出过滤。缺省不启用 */
+  guardrails?: Guardrails;
 }
 
 /** 用这个 reason 中断 run，表示服务要重启而不是用户取消 */
@@ -38,6 +49,12 @@ type Finished = Exclude<RunStatus, 'running' | 'waiting_approval'>;
  * 每一步都先写事件再继续，所以进程崩溃后再次调用本函数即可从断点恢复。
  */
 export async function runAgent(runId: string, user: User, options: AgentOptions, signal = new AbortController().signal): Promise<RunStatus> {
+  const telemetry = options.telemetry ?? activeTelemetry();
+  if (!telemetry) return runLoop(runId, user, options, signal);
+  return telemetry.run({ runId, user, store: options.store, model: options.model.name }, () => runLoop(runId, user, { ...options, telemetry }, signal));
+}
+
+async function runLoop(runId: string, user: User, options: AgentOptions, signal: AbortSignal): Promise<RunStatus> {
   const { store, model, maxSteps = 8, maxTokens = 60_000, maxOutputTokens = 2_000, contextBudget = 32_000, logger = silentLogger } = options;
   const run = store.getRun(runId);
   if (!run || run.userId !== user.id || run.tenantId !== user.tenantId) throw new Error(`run ${runId} 不存在`);
@@ -57,6 +74,28 @@ export async function runAgent(runId: string, user: User, options: AgentOptions,
     while (true) {
       signal.throwIfAborted();
       const events = store.events(runId);
+
+      // 第 21 章：输入检查只在第一次调用模型之前做；拦下时一次模型调用也不发生
+      const inputBlock = options.guardrails && !events.some((e) => e.type === 'assistant_message') ? options.guardrails.checkInput(run.question) : undefined;
+      if (inputBlock) {
+        store.transaction(() => {
+          store.append(runId, 'guardrail', inputBlock);
+          store.append(runId, 'assistant_message', { content: BLOCKED_INPUT_REPLY, toolCalls: [] });
+          store.append(runId, 'run_finished', { status: 'completed' });
+          store.setStatus(runId, 'completed');
+        });
+        logger.info('guardrail', { runId, stage: 'input', rule: inputBlock.rule });
+        return 'completed';
+      }
+
+      // 记忆只在 run 开始时取一次并写进日志：之后每一轮、回放和崩溃恢复看到的都是同一份
+      if (options.memory && !events.some((e) => e.type === 'memory_recalled' || e.type === 'assistant_message')) {
+        const recalled = options.memory.recall(user);
+        store.append(runId, 'memory_recalled', recalled);
+        logger.info('memory recalled', { runId, items: recalled.items.length, dropped: recalled.dropped });
+        continue;
+      }
+
       const pending = pendingToolCalls(events);
 
       if (pending.length > 0) {
@@ -64,7 +103,10 @@ export async function runAgent(runId: string, user: User, options: AgentOptions,
         // 写之后的读要看到写的结果，审批暂停时后面的调用（包括只读的）都不执行
         for (const batch of executionBatches(pending, tools)) {
           signal.throwIfAborted();
-          const outcomes = await Promise.allSettled(batch.map((call) => executeToolCall(call, events, tools, user, runId, options, signal)));
+          const outcomes = await Promise.allSettled(batch.map((call) => {
+            const execute = () => executeToolCall(call, events, tools, user, runId, options, signal);
+            return options.telemetry ? options.telemetry.tool(call, { runId, store }, execute) : execute();
+          }));
           const rejected = outcomes.find((result) => result.status === 'rejected');
           if (rejected) throw rejected.reason;
           if (outcomes.some((result) => result.status === 'fulfilled' && result.value === 'paused')) {
@@ -91,7 +133,8 @@ export async function runAgent(runId: string, user: User, options: AgentOptions,
 
       const toolSpecs = options.tools.map((tool) => tool.spec);
       const alreadyCleared = new Set(events.flatMap((e) => (e.type === 'context_trimmed' ? e.data.callIds : [])));
-      const context = fitContext([{ role: 'system', content: systemPrompt(user) }, ...toModelMessages(events)], {
+      const prompt = (options.systemPrompt?.(user) ?? systemPrompt(user, new Date(), [...tools.keys()])) + (options.guardrails?.promptSuffix ?? '');
+      const context = fitContext([{ role: 'system', content: prompt }, ...toModelMessages(events)], {
         budget: contextBudget,
         overheadTokens: estimateTokens(JSON.stringify(toolSpecs)),
         alreadyCleared,
@@ -104,14 +147,18 @@ export async function runAgent(runId: string, user: User, options: AgentOptions,
       }
 
       const started = Date.now();
-      const response = await model.complete({
+      const request: ModelRequest = {
         messages: context.messages,
         tools: toolSpecs,
         // 限制单次输出，预算最多超出这一次调用的输入部分
         maxOutputTokens: Math.min(maxOutputTokens, remaining),
         signal,
-        onText: (delta) => options.onDelta?.(runId, delta),
-      });
+        // 开启护栏时不逐字推送：回答要先过输出检查，检查后再一次性推送，否则被拦下的内容已经到了浏览器
+        onText: options.guardrails ? undefined : (delta) => options.onDelta?.(runId, delta),
+      };
+      const response = options.telemetry
+        ? await options.telemetry.chat(model.name, request, (traced) => model.complete(traced))
+        : await model.complete(request);
       const latencyMs = Date.now() - started;
       const modelName = response.model ?? model.name;
       // 被截断的回复里，工具参数可能只生成了一半，绝不能执行
@@ -120,10 +167,14 @@ export async function runAgent(runId: string, user: User, options: AgentOptions,
       const final: [Finished, string?] | undefined = truncated
         ? ['failed', '模型输出被长度截断']
         : toolCalls.length === 0 ? ['completed'] : undefined;
+      const output = options.guardrails?.checkOutput(response.message.content, prompt);
+      const content = output?.text ?? response.message.content;
+      if (output && content) options.onDelta?.(runId, content);
 
       // 最终回答、用量和结束状态在同一个事务里提交：崩溃后要么都在，要么都不在
       store.transaction(() => {
-        store.append(runId, 'assistant_message', { content: response.message.content, toolCalls });
+        output?.findings.forEach((finding) => store.append(runId, 'guardrail', finding));
+        store.append(runId, 'assistant_message', { content, toolCalls });
         store.append(runId, 'usage', { model: modelName, ...response.usage, latencyMs });
         if (final) {
           store.append(runId, 'run_finished', { status: final[0], ...(final[1] ? { reason: final[1] } : {}) });
@@ -165,10 +216,24 @@ async function executeToolCall(
   if (!tool) return fail({ code: 'UNKNOWN_TOOL', message: `没有名为 ${call.name} 的工具` });
 
   let args: unknown;
+  let raw: unknown;
   try {
-    args = tool.parse(JSON.parse(call.arguments || '{}'));
+    raw = JSON.parse(call.arguments || '{}');
+    args = tool.parse(raw);
   } catch (error) {
     return fail({ code: 'INVALID_ARGUMENTS', message: error instanceof ToolError ? error.message : '参数不是合法 JSON' });
+  }
+
+  // 第 21 章：策略检查在审批之前。违反策略的调用不去打扰员工，直接以错误结果返回给模型
+  const runStarted = events.find((e) => e.type === 'run_started');
+  const question = runStarted?.type === 'run_started' ? runStarted.data.question : '';
+  const blocked = options.guardrails?.checkToolCall({ call, tool, raw }, { user, question, events });
+  if (blocked) {
+    logger.info('guardrail', { runId, stage: 'tool_call', rule: blocked.rule, tool: call.name });
+    return store.transaction(() => {
+      store.append(runId, 'guardrail', blocked);
+      return fail({ code: 'GUARDRAIL_BLOCKED', message: `安全策略拒绝了这次调用：${blocked.detail}` });
+    });
   }
 
   const context = { user, runId, callId: call.id, signal };
@@ -199,7 +264,15 @@ async function executeToolCall(
   const started = Date.now();
   try {
     const result = await tool.run(args, context);
-    store.append(runId, 'tool_finished', { callId: call.id, name: call.name, ok: true, result });
+    const screened = options.guardrails?.screenToolResult(call.name, call.id, result);
+    if (screened?.findings.length) {
+      store.transaction(() => {
+        screened.findings.forEach((finding) => store.append(runId, 'guardrail', finding));
+        store.append(runId, 'tool_finished', { callId: call.id, name: call.name, ok: true, result: screened.result });
+      });
+    } else {
+      store.append(runId, 'tool_finished', { callId: call.id, name: call.name, ok: true, result });
+    }
     logger.info('tool call', { runId, tool: call.name, ok: true, latencyMs: Date.now() - started });
   } catch (error) {
     if (signal.aborted) throw error;
@@ -239,6 +312,7 @@ export function toModelMessages(events: AgentEvent[]): Message[] {
   const messages: Message[] = [];
   let order = new Map<string, number>();
   let results: Array<{ index: number; message: Message }> = [];
+  let questionIndex = -1;
   const flush = () => {
     results.sort((a, b) => a.index - b.index).forEach((result) => messages.push(result.message));
     results = [];
@@ -246,7 +320,13 @@ export function toModelMessages(events: AgentEvent[]): Message[] {
   for (const event of events) {
     if (event.type === 'run_started') {
       flush();
+      questionIndex = messages.length;
       messages.push({ role: 'user', content: event.data.question });
+    }
+    // 记忆放在问题之前、以 user 角色出现：它来自员工本人，权限不高于员工，绝不放进系统提示词
+    if (event.type === 'memory_recalled' && event.data.items.length > 0 && questionIndex >= 0) {
+      messages.splice(questionIndex, 0, { role: 'user', content: formatMemories(event.data.items) });
+      questionIndex += 1;
     }
     if (event.type === 'assistant_message') {
       flush();

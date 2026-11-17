@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Python (course/ticket-agent/python)
+__pycache__/
+*.egg-info/

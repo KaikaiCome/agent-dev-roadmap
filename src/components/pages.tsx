@@ -16,7 +16,7 @@ export function Home() {
       <header className="hero">
         <span className="badge">面向前端开发者的企业级 Agent 实训</span>
         <h1>从 React 开发到企业级 Agent 交付</h1>
-        <p>不止列学习清单：跟着 12 章基础篇实战教程，从一行模型调用写到带检索、审批、多租户、审计、评估和部署的企业级 Agent；再用 6 章高级篇深入 MCP、上下文工程、评审校准、性能可靠性、面试，以及生产难点的研究路径。每一步都有可运行的源码、命令和真实输出。</p>
+        <p>不止列学习清单：跟着 12 章基础篇实战教程，从一行模型调用写到带检索、审批、多租户、审计、评估和部署的企业级 Agent；再用高级篇深入 MCP、上下文工程、评审校准、性能可靠性、面试、生产难点的研究路径，以及混合检索等难点的落地实现。每一步都有可运行的源码、命令和真实输出。</p>
         <div className="overall">
           <ProgressBar value={overall} label="总进度" />
           <span>总进度 {Math.round(overall * 100)}%</span>

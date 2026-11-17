@@ -3,7 +3,10 @@ import { parseArgs } from 'node:util';
 import { resolveApproval, runAgent, usageOf } from './agent.ts';
 import { loadConfig } from './config.ts';
 import { findUser, users } from './data/seed.ts';
+import { createGuardrails } from './guardrails/index.ts';
 import { createModel } from './llm/index.ts';
+import { createMemory } from './memory.ts';
+import { createSearch } from './retrieval/index.ts';
 import { Store } from './store.ts';
 import { createTools } from './tools/index.ts';
 
@@ -18,7 +21,9 @@ if (!user) {
 const config = loadConfig();
 const store = new Store(':memory:');
 const model = createModel(config);
-const tools = createTools(store);
+const memory = config.memory ? createMemory(store) : undefined;
+const tools = createTools(store, { search: createSearch(config), subagent: config.subagent ? { model } : undefined, memory });
+const guardrails = config.guardrails ? createGuardrails() : undefined;
 const rl = createInterface({ input: process.stdin, output: process.stdout });
 
 store.onEvent((event) => {
@@ -36,7 +41,7 @@ while (true) {
 
   const run = store.createRun(user, question);
   process.stdout.write('Agent> ');
-  let status = await runAgent(run.id, user, { model, store, tools, onDelta: (_, text) => process.stdout.write(text) });
+  let status = await runAgent(run.id, user, { model, store, tools, memory, guardrails, onDelta: (_, text) => process.stdout.write(text) });
   while (status === 'waiting_approval') {
     const request = store.events(run.id).findLast((event) => event.type === 'approval_requested');
     if (!request || request.type !== 'approval_requested') break;
@@ -44,7 +49,7 @@ while (true) {
     const answer = (await rl.question('确认执行？(y/N) ')).trim().toLowerCase();
     resolveApproval(store, run.id, user, request.data.callId, answer === 'y');
     process.stdout.write('Agent> ');
-    status = await runAgent(run.id, user, { model, store, tools, onDelta: (_, text) => process.stdout.write(text) });
+    status = await runAgent(run.id, user, { model, store, tools, memory, guardrails, onDelta: (_, text) => process.stdout.write(text) });
   }
   const usage = usageOf(store.events(run.id));
   console.log(`\n[${status}] 模型调用 ${usage.modelCalls} 次，token ${usage.inputTokens}+${usage.outputTokens}`);

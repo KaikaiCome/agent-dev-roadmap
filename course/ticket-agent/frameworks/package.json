@@ -1,0 +1,19 @@
+{
+  "name": "ticket-agent-frameworks",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "demo": "node demo.ts",
+    "test": "node --test \"test/*.test.ts\"",
+    "typecheck": "node ../../../node_modules/typescript/bin/tsc -p ."
+  },
+  "dependencies": {
+    "@langchain/core": "1.4.1",
+    "@langchain/langgraph": "1.7.5",
+    "@openai/agents": "0.22.0",
+    "zod": "4.6.7"
+  }
+}

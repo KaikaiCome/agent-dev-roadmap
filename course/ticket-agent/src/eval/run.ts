@@ -1,16 +1,18 @@
 import { loadConfig } from '../config.ts';
 import { createModel } from '../llm/index.ts';
+import { createSearch } from '../retrieval/index.ts';
 import { evalCases } from './cases.ts';
 import { gate, runCase, type CaseResult } from './evaluate.ts';
 
 // 用法：npm run eval。失败时进程退出码为 1，可直接放进 CI 阻止发布
 const config = loadConfig();
 const model = createModel(config);
-console.log(`评测模型：${model.name === 'mock' ? 'mock（离线模拟）' : config.model}，共 ${evalCases.length} 条用例\n`);
+const search = createSearch(config);
+console.log(`评测模型：${model.name === 'mock' ? 'mock（离线模拟）' : config.model}，检索：${config.retrieval}${config.subagent ? '，子 Agent：research' : ''}，共 ${evalCases.length} 条用例\n`);
 
 const results: CaseResult[] = [];
 for (const testCase of evalCases) {
-  const result = await runCase(testCase, model);
+  const result = await runCase(testCase, model, search, { subagent: config.subagent });
   results.push(result);
   const mark = result.passed ? 'PASS' : 'FAIL';
   console.log(`${mark}  ${result.critical ? '[critical] ' : ''}${result.id}  ${result.latencyMs}ms`);

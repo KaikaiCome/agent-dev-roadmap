@@ -38,6 +38,8 @@ export interface ModelRequest {
   signal?: AbortSignal;
   /** 每收到一小段文字就回调一次，用来做打字机效果 */
   onText?: (delta: string) => void;
+  /** 第 24 章：要求模型按 JSON Schema 输出最终回答（OpenAI 兼容服务映射为 response_format: json_schema） */
+  responseFormat?: { name: string; schema: Record<string, unknown>; strict?: boolean };
 }
 
 export interface ModelResponse {

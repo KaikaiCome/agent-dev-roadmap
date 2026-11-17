@@ -48,28 +48,48 @@ function decide(messages: Message[], tools: string[]): AssistantMessage {
 
   const results = toolResults(messages.slice(lastUser + 1));
   const search = results.get('search_knowledge');
+  const research = results.get('research');
+  const remembered = results.get('remember');
   const draft = results.get('prepare_ticket');
   const created = results.get('create_ticket');
   const wantsTicket = /工单|报修|提交|申请/.test(question);
+  // 第 19 章：以下分支只在开启长期记忆或子 Agent 时才会走到（工具列表里有 remember / research，或上下文里有记忆块）
+  const memories = recalledMemories(messages.slice(0, lastUser));
+  const memoryNote = memories.length ? `\n员工资料（来自长期记忆）：${memories.join('；')}` : '';
 
+  const rememberRequest = tools.includes('remember') ? /^记住[：:]\s*(?:我的)?(.{1,20}?)是(.+)$/.exec(question) : null;
+  if (rememberRequest && !remembered) {
+    return call('remember', { key: rememberRequest[1].trim(), value: rememberRequest[2].trim() });
+  }
+  if (rememberRequest && remembered) {
+    return text(remembered.ok ? `好的，已记住「${rememberRequest[1].trim()}：${rememberRequest[2].trim()}」。` : `没有保存这条记忆：${remembered.error?.message ?? '未知错误'}`);
+  }
+
+  if (!search && !research && tools.includes('research') && !tools.includes('search_knowledge')) {
+    return call('research', { task: question });
+  }
   if (!search && tools.includes('search_knowledge')) {
     return call('search_knowledge', { query: question });
   }
   const hits: Array<{ sourceId: string; title: string; snippet: string }> = search?.ok ? search.data.results : [];
+  const sources: string[] = research ? (research.ok ? research.data.sources : []) : hits.map((hit) => hit.sourceId);
   if (wantsTicket && !draft && tools.includes('prepare_ticket')) {
     return call('prepare_ticket', {
       title: question.slice(0, 40),
-      description: `员工请求：${question}`,
-      sourceIds: hits.map((hit) => hit.sourceId),
+      description: `员工请求：${question}${memoryNote}`,
+      sourceIds: sources,
     });
   }
   if (wantsTicket && draft?.ok && !created && tools.includes('create_ticket')) {
     return call('create_ticket', { draftId: draft.data.draftId });
   }
 
-  const parts = hits.length
-    ? [`根据《${hits[0].title}》[${hits[0].sourceId}]：${hits[0].snippet}`]
-    : ['没有找到你有权限查看的相关制度，无法给出确定答案。建议咨询人事或提交工单。'];
+  const parts = research && sources.length
+    ? [research.data.summary]
+    : hits.length
+      ? [`根据《${hits[0].title}》[${hits[0].sourceId}]：${hits[0].snippet}`]
+      : ['没有找到你有权限查看的相关制度，无法给出确定答案。建议咨询人事或提交工单。'];
+  if (memories.length && !wantsTicket) parts.push(`（已参考你保存的记忆：${memories.join('；')}）`);
   if (created?.ok) parts.push(`工单已创建，编号 ${created.data.ticketId}。`);
   else if (created?.error?.code === 'APPROVAL_REJECTED') parts.push('你拒绝了创建工单，没有提交任何工单。');
   else if (created) parts.push(`工单创建失败：${created.error?.message ?? '未知错误'}`);
@@ -89,6 +109,13 @@ function toolResults(turn: Message[]): Map<string, ToolResult> {
     }
   }
   return results;
+}
+
+/** 记忆块（见 memory.ts 的 formatMemories）里的每一条内容。假模型只会原样引用，不会推理 */
+function recalledMemories(before: Message[]): string[] {
+  const block = before.find((m) => m.role === 'user' && m.content.includes('<memory>'));
+  if (!block) return [];
+  return [...block.content.matchAll(/^- \[[^\]]+\] (.+)$/gm)].map((m) => m[1]);
 }
 
 let callCounter = 0;

@@ -3,7 +3,8 @@ import envExample from 'virtual:course-env-example';
 // 把参考项目的源码以原始文本导入，教程里展示的代码与可运行、已测试的代码永远一致。
 const modules = import.meta.glob(
   [
-    '../../course/ticket-agent/**/*.{ts,tsx,json,html}',
+    '../../course/ticket-agent/**/*.{ts,tsx,json,html,py}',
+    '../../course/ticket-agent/python/pyproject.toml',
     '../../course/ticket-agent/Dockerfile',
     '!**/node_modules/**',
     '!**/package-lock.json',

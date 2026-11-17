@@ -8,9 +8,11 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "vitest run && npm run test:course && npm run test:mcp",
+    "test": "vitest run && npm run test:course && npm run test:mcp && npm run test:frameworks",
     "test:course": "tsc -p course/ticket-agent && npm --prefix course/ticket-agent test",
-    "test:mcp": "tsc -p course/ticket-agent/mcp && npm --prefix course/ticket-agent/mcp test"
+    "test:mcp": "tsc -p course/ticket-agent/mcp && npm --prefix course/ticket-agent/mcp test",
+    "test:python": "python -m unittest discover -s course/ticket-agent/python/tests -t course/ticket-agent/python",
+    "test:frameworks": "tsc -p course/ticket-agent/frameworks && npm --prefix course/ticket-agent/frameworks test"
   },
   "dependencies": {
     "react": "^19.3.1",

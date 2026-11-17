@@ -2,9 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { cancelIdleRun, resolveApproval, runAgent, SHUTDOWN, usageOf, type AgentOptions } from './agent.ts';
 import { findUser, users, type User } from './data/seed.ts';
+import type { RunQueue } from './distributed/queue.ts';
 import { terminalStatuses, type AgentEvent } from './events.ts';
 import type { ChatModel } from './llm/types.ts';
 import { silentLogger, type Logger } from './logger.ts';
+import type { Memory } from './memory.ts';
+import type { AgentTelemetry } from './telemetry/genai.ts';
 import type { Store } from './store.ts';
 import type { Tool } from './tools/types.ts';
 
@@ -36,6 +39,14 @@ export interface AppOptions {
   directory?: UserDirectory;
   /** 优雅退出最多等多久，超时后强制断开所有连接 */
   shutdownTimeoutMs?: number;
+  /** 第 19 章：长期记忆。给出时 run 开始会注入记忆，并开放“我的记忆”查看和删除接口 */
+  memory?: Memory;
+  /** 第 21 章：护栏。缺省不启用 */
+  guardrails?: AgentOptions['guardrails'];
+  /** 第 22 章：OpenTelemetry 追踪。缺省不追踪 */
+  telemetry?: AgentTelemetry;
+  /** 第 23 章：给出时 run 不在本进程执行，而是写进持久队列，由 worker 进程领取 */
+  queue?: RunQueue;
 }
 
 class HttpError extends Error {
@@ -65,16 +76,18 @@ export function createApp(options: AppOptions) {
 
   const activeCount = (userId: string) => [...active.values()].filter((entry) => entry.userId === userId).length;
 
-  /** 在后台执行 run。HTTP 请求立即返回，进度通过 SSE 推送 */
-  function start(runId: string, user: User) {
-    if (active.has(runId) || draining) return;
+  /** 在后台执行 run。HTTP 请求立即返回，进度通过 SSE 推送。traceparent 是触发这次执行的请求带来的上游 trace（第 22 章） */
+  function start(runId: string, user: User, traceparent?: string | string[]) {
+    if (options.queue || active.has(runId) || draining) return;
     const controller = new AbortController();
     active.set(runId, { controller, userId: user.id });
-    runAgent(runId, user, {
+    const { telemetry } = options;
+    const execute = () => runAgent(runId, user, {
       ...options.agent,
-      model, store, tools, logger,
+      model, store, tools, logger, memory: options.memory, telemetry, guardrails: options.guardrails,
       onDelta: (id, text) => deltaListeners.forEach((listener) => listener(id, text)),
-    }, controller.signal)
+    }, controller.signal);
+    (telemetry ? telemetry.continueFrom(traceparent, execute) : execute())
       .catch((error) => logger.error('run crashed', { runId, error: String(error) }))
       .finally(() => active.delete(runId));
   }
@@ -99,9 +112,11 @@ export function createApp(options: AppOptions) {
     const parts = url.pathname.split('/').filter(Boolean);
 
     // CSRF 防护：所有写请求必须是 JSON，且来自允许的前端地址
-    if (method === 'POST') {
+    if (method === 'POST' || method === 'DELETE') {
       const origin = req.headers.origin;
       if (origin && origin !== allowedOrigin) throw new HttpError(403, '不允许的来源');
+    }
+    if (method === 'POST') {
       if (!req.headers['content-type']?.startsWith('application/json')) throw new HttpError(415, '请求体必须是 JSON');
     }
 
@@ -126,6 +141,21 @@ export function createApp(options: AppOptions) {
 
     if (method === 'GET' && url.pathname === '/api/me') return json(res, 200, publicUser(user));
 
+    // 第 19 章：员工能看到 Agent 记住了自己什么，并能逐条或全部删除。只能操作自己的记忆
+    if (options.memory && parts[0] === 'api' && parts[1] === 'memories' && parts.length <= 3) {
+      if (method === 'GET' && !parts[2]) return json(res, 200, store.memories(user.tenantId, user.id));
+      if (method === 'DELETE' && parts[2]) {
+        if (!store.deleteMemory(user.tenantId, user.id, parts[2])) throw new HttpError(404, '记忆不存在');
+        logger.info('memory deleted', { userId: user.id, tenantId: user.tenantId, memoryId: parts[2] });
+        return json(res, 200, { deleted: 1 });
+      }
+      if (method === 'DELETE') {
+        const deleted = store.deleteMemories(user.tenantId, user.id);
+        logger.info('memories erased', { userId: user.id, tenantId: user.tenantId, deleted });
+        return json(res, 200, { deleted });
+      }
+    }
+
     if (method === 'POST' && url.pathname === '/api/runs') {
       if (draining) throw new HttpError(503, '服务正在重启，请稍后再试');
       const body = await readJson(req);
@@ -134,9 +164,12 @@ export function createApp(options: AppOptions) {
       if (activeCount(user.id) >= maxActiveRunsPerUser) throw new HttpError(429, '同时进行的任务太多，请稍后再试');
       const waiting = store.runsWithStatus('waiting_approval').filter((r) => r.userId === user.id && r.tenantId === user.tenantId).length;
       if (waiting >= maxWaitingRunsPerUser) throw new HttpError(429, '待确认的任务太多，请先处理或取消');
-      const run = store.createRun(user, question);
+      // 队列模式：建 run 和入队在同一个事务里；租户排队数超限时拒绝（背压）
+      const submitted = options.queue ? options.queue.submit(user, question) : { ok: true as const, run: store.createRun(user, question) };
+      if (!submitted.ok) throw new HttpError(429, submitted.message);
+      const { run } = submitted;
       logger.info('run created', { runId: run.id, userId: user.id, tenantId: user.tenantId });
-      start(run.id, user);
+      start(run.id, user, req.headers.traceparent);
       return json(res, 201, { runId: run.id });
     }
 
@@ -154,17 +187,18 @@ export function createApp(options: AppOptions) {
         if (typeof body.callId !== 'string' || typeof body.approved !== 'boolean') throw new HttpError(400, '需要 callId 和 approved');
         // 批准后 run 会恢复执行，同样要受并发上限约束
         if (activeCount(user.id) >= maxActiveRunsPerUser) throw new HttpError(429, '同时进行的任务太多，请稍后再试');
-        const result = resolveApproval(store, run.id, user, body.callId, body.approved);
+        const decide = () => resolveApproval(store, run.id, user, body.callId as string, body.approved as boolean);
+        const result = options.queue ? options.queue.resumeAfter(run.id, decide) : decide();
         if (!result.ok) throw new HttpError(result.code === 'NOT_FOUND' ? 404 : 409, result.code);
         logger.info('approval resolved', { runId: run.id, callId: body.callId, approved: result.approved, userId: user.id });
-        start(run.id, user);
+        start(run.id, user, req.headers.traceparent);
         return json(res, 200, result);
       }
 
       if (method === 'POST' && action === 'cancel') {
         const entry = active.get(run.id);
         if (entry) entry.controller.abort();
-        else if (!cancelIdleRun(store, run.id)) throw new HttpError(409, 'run 已结束');
+        else if (!(options.queue ? options.queue.cancel(run.id) : cancelIdleRun(store, run.id))) throw new HttpError(409, 'run 已结束');
         return json(res, 202, { ok: true });
       }
     }
@@ -205,6 +239,8 @@ export function createApp(options: AppOptions) {
     const unsubscribe = store.onEvent(send);
     deltaListeners.add(sendDelta);
     const ping = setInterval(() => write(': ping\n\n'), pingMs);
+    // 队列模式下事件由别的进程写入，本进程收不到通知，只能轮询数据库（生产环境用 LISTEN/NOTIFY 或消息总线）
+    const poll = options.queue ? setInterval(() => store.events(runId, lastSeq).forEach(send), 300) : undefined;
     function close() {
       if (closed) return;
       closed = true;
@@ -212,6 +248,7 @@ export function createApp(options: AppOptions) {
       deltaListeners.delete(sendDelta);
       streams.delete(close);
       clearInterval(ping);
+      clearInterval(poll);
       res.end();
     }
     streams.set(close, userId);

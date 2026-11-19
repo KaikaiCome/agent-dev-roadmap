@@ -137,5 +137,13 @@ export function chapterChecks(): ChapterChecks[] {
         },
       ],
     },
+    {
+      id: 'paradigms',
+      title: '第 28 章 工作范式',
+      checks: [
+        { name: 'Agent Loop / Harness / Graph 测试', argv: nodeTest('paradigms') },
+        { name: '三种范式对比演示', argv: [node, 'examples/14-paradigms.ts'], expect: /Graph（混合）\s+2\s+是\s+1/ },
+      ],
+    },
   ];
 }

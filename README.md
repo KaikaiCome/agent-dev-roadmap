@@ -36,6 +36,7 @@
   - 第 25 章：模型侧（从事件日志导出 OpenAI 格式的 SFT 数据：还原工具调用配对、脱敏、租户退出、注入与评测题过滤、去重、按员工划分训练/验证集与质量报告；从评分构造 DPO 偏好数据；mock 变体的前后对比评测、逐条退化检测与小样本显著性；何时微调、蒸馏、LoRA、多模态输入与数据治理）
   - 第 26 章：框架对比（用 OpenAI Agents SDK 和 LangGraph.js 重写检索、审批建单与多轮对话，和手写实现逐字对比；对比控制力、持久化、审批、可观测、锁定与升级成本）
   - 第 27 章：Python 版本（标准库移植模型适配、SSE、工具循环、权限检索、审批建单、SQLite 与评测门禁，并对照 pydantic、FastAPI、OpenAI Python SDK、Pydantic AI 与 LangGraph）；可选，`npm run test:python` 单独运行，不在 `npm test` 中
+  - 第 28 章：三种工作范式（零依赖实现 Agent Loop 内核、通过钩子接入的 Harness、按 Pregel 超步语义的图运行时，以及“图管流程、节点里跑循环”的混合工单助手；用失败实验对比越权、失控、工具出错和崩溃恢复；reducer 与并发写冲突、interrupt 恢复时节点重跑、时间旅行分叉、至少一次 + 幂等；选型方法，以及 Claude Code、Agents SDK、LangGraph 分别属于哪种范式）
 
 ## 深入专题
 

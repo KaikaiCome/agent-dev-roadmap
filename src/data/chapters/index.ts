@@ -8,6 +8,7 @@ import { chapter as realModel } from './real-model';
 import { chapter as modelSide } from './model-side';
 import { chapter as frameworks } from './frameworks';
 import { chapter as pythonPort } from './python-port';
+import { chapter as paradigms } from './paradigms';
 
 // 第 19 章起的落地章节，每章一个文件，按章节号顺序排列。
-export const implementationChapters: Chapter[] = [subagentsMemory, codingAgent, redTeam, observability, distributed, realModel, modelSide, frameworks, pythonPort];
+export const implementationChapters: Chapter[] = [subagentsMemory, codingAgent, redTeam, observability, distributed, realModel, modelSide, frameworks, pythonPort, paradigms];

@@ -24,6 +24,7 @@
     "structured": "node examples/12-structured.ts",
     "worker": "node --env-file-if-exists=.env src/worker.ts",
     "chaos": "node examples/13-chaos.ts",
+    "paradigms": "node examples/14-paradigms.ts",
     "test": "node --test \"test/*.test.ts\"",
     "verify": "node src/verify/run.ts",
     "typecheck": "tsc -p ."

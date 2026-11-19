@@ -21,7 +21,7 @@
 ## 命令
 
 ```sh
-npm test                       # 120 个后端测试（node:test，含高级篇）
+npm test                       # 135 个后端测试（node:test，含高级篇）
 npm run verify                 # 本地验收：按章节运行测试和门禁，不达标退出码为 1（-- <章节id> 只验收部分，--list 列出章节）
 npm install                    # 仅类型检查需要
 npm run typecheck              # tsc 严格类型检查
@@ -39,6 +39,7 @@ npm run eval:k                 # 第 24 章：每条用例跑 K 次（默认 5�
 npm run structured             # 第 24 章：结构化输出的严格/宽松解析与修复循环对比（合格率、修复率、额外 token）
 npm run train:data             # 第 25 章：从模拟日志导出 SFT / DPO 数据和质量报告，写入 data/training/
 npm run train:compare          # 第 25 章：两个 mock 变体的前后对比评测（逐条修复/退化、显著性）
+npm run paradigms              # 第 28 章：裸 Agent Loop / 加 Harness / 混合 Graph 三种实现的对比与失败实验，图的检查点历史与 Mermaid 流程图
 npm run replay -- <runId>      # 第 17 章：回放一次 run 的完整事件和发给模型的消息（加 --brief 只看每个事件的前 80 个字符）
 npm run chat -- --user alice   # 命令行对话（含审批）
 npm run eval                   # 评测门禁，不达标时退出码为 1（RETRIEVAL=hybrid 时用混合检索，SUBAGENT=on 时检索交给子 Agent）
@@ -78,6 +79,7 @@ npm run dev                    # React 工作台，/api 代理到 8787
 | `src/training/` | 从事件日志导出 OpenAI 格式的 SFT 数据（工具调用配对、稳定 id、脱敏、租户退出、注入/评测题/差评过滤、去重、按员工划分、质量报告）；DPO 偏好对；mock 变体与前后对比评测（逐条退化、McNemar 检验） | 第 25 章 |
 | `frameworks/` | 用 OpenAI Agents SDK 与 LangGraph.js 重写核心流程，并与手写版逐字对比 | 第 26 章 |
 | `python/` | Python 3.11+ 标准库移植：适配器、SSE、工具循环、权限检索、审批建单、SQLite、mock 模型、评测门禁 | 第 27 章 |
+| `src/paradigms/`、`examples/14-paradigms.ts` | 三种工作范式：可序列化状态的 Agent Loop 内核；通过钩子接入的 Harness（预算、重复调用检测、上下文裁剪、审批、错误信封、检查点、身份比对）；按 Pregel 超步语义的零依赖图运行时（reducer、条件边、扇出扇入、interrupt、时间旅行、递归上限）；“图管流程、节点里跑循环”的混合工单助手 | 第 28 章 |
 | `src/verify/` | 本地验收：按章节运行测试与门禁脚本，强制离线模型，可选子项目缺依赖时跳过（`npm run verify`） | 全部章节 |
 
 ## MCP 服务（高级篇第 12 章）

@@ -73,7 +73,7 @@ export const chapters: Chapter[] = [
     title: '准备：环境、项目结构与 Agent 的本质',
     summary: '装好 Node，跑通参考项目的全部测试，弄清楚 Agent 到底是什么。',
     minutes: 40,
-    outcome: '本机能运行参考项目，120 个后端测试全部通过；能用自己的话解释 Agent 的组成。',
+    outcome: '本机能运行参考项目，135 个后端测试全部通过；能用自己的话解释 Agent 的组成。',
     concepts: [
       { term: '大模型（LLM）', text: '可以把它看成一个函数：输入一组消息，输出一条新消息。它不会主动做任何事，也不记得上一次请求——每次调用都要把需要的上下文全部传进去。' },
       { term: 'Agent', text: 'Agent = 模型 + 工具 + 循环 + 状态。程序把问题和可用工具交给模型，模型回答“我要调用某工具、参数是什么”，程序执行工具并把结果交回模型，如此循环，直到模型给出最终回答。' },
@@ -122,6 +122,7 @@ export const chapters: Chapter[] = [
 │  ├─ eval/           评测集与发布门禁
 │  ├─ retrieval/ …    高级篇第 18–25 章的实现：retrieval、coding、guardrails、redteam、
 │  │                  telemetry、distributed、reliability、training，以及 subagent.ts、memory.ts
+│  ├─ paradigms/      高级篇第 28 章：Agent Loop 内核、Harness、图运行时与混合工单助手
 │  └─ verify/         本地验收：npm run verify
 ├─ test/              node:test 自动化测试
 ├─ web/               React 工作台
@@ -134,15 +135,15 @@ export const chapters: Chapter[] = [
       {
         title: '跑通全部测试',
         text: [
-          '测试使用 Node 内置的 `node:test`，同样零依赖。看到 120 个测试全部通过，说明环境没问题。基础篇对应 `test/` 里的 llm、knowledge、agent、lifecycle、server、eval 六个文件，其余测试文件属于高级篇（第 13 章以后），学基础篇时可以先忽略。',
+          '测试使用 Node 内置的 `node:test`，同样零依赖。看到 135 个测试全部通过，说明环境没问题。基础篇对应 `test/` 里的 llm、knowledge、agent、lifecycle、server、eval 六个文件，其余测试文件属于高级篇（第 13 章以后），学基础篇时可以先忽略。',
         ],
         command: 'npm test',
         output: `✔ 上下文超预算时从最旧的工具结果开始清除，最近的结果和配对关系保留
 ✔ 上下文清理有滞后：清过的结果下一轮继续清除，没再超预算就不清新的
 …（中间省略）
 ✔ 验收：按章节 id 选择，未知 id 直接报错并列出可选项；每章至少一项检查且 id 唯一
-ℹ tests 120
-ℹ pass 120
+ℹ tests 135
+ℹ pass 135
 ℹ fail 0`,
       },
       {
@@ -195,7 +196,7 @@ found 0 vulnerabilities
       { symptom: '运行时打印 ExperimentalWarning: SQLite is an experimental feature', cause: 'Node 24 中 node:sqlite 仍标记为实验特性。', fix: '可以忽略，不影响功能。' },
     ],
     exercises: [
-      { id: 't-setup-test', text: '在本机运行 npm test，120 个测试全部通过' },
+      { id: 't-setup-test', text: '在本机运行 npm test，135 个测试全部通过' },
       { id: 't-setup-verify', text: '运行 npm run verify，全部检查通过（可选子项目可以是跳过）' },
       { id: 't-setup-tsc', text: '运行类型检查无报错，并故意写错一个类型确认能被发现' },
       { id: 't-setup-explain', text: '不看资料，写下 Agent 的四个组成部分和“企业级”额外要求的至少五项', detail: '写在本页笔记或学习笔记里，学完全部章节后再对照修改。' },
